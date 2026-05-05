@@ -499,6 +499,9 @@ properties:
       Partial URL, as in:
         * `projects/{{projectId}}/regions/region/publicDelegatedPrefixes/{{sub-pdp-name}}`
         * `regions/{{region}}/publicDelegatedPrefixes/{{sub-pdp-name}}`
+    update_verb: PATCH
+    update_url: projects/{{project}}/regions/{{region}}/subnetworks/{{name}}
+    fingerprint_name: fingerprint
     ignore_read: true
     is_missing_in_cai: true
   - name: ipv6GceEndpoint
