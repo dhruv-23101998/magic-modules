@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-provider-google/google/acctest"
 	"github.com/hashicorp/terraform-provider-google/google/envvar"
+	"github.com/hashicorp/terraform-provider-google/google/tpgresource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
         tpgcompute "github.com/hashicorp/terraform-provider-google/google/services/compute"
 
@@ -718,7 +719,7 @@ func TestAccComputeSubnetwork_ipv6UpdateWithPdp(t *testing.T) {
 					testAccCheckComputeSubnetworkExists(t, subnetResName, new(compute.Subnetwork)),
 					resource.TestCheckResourceAttr(subnetResName, "stack_type", "IPV4_IPV6"),
 					resource.TestCheckResourceAttr(subnetResName, "ipv6_access_type", "INTERNAL"),
-					resource.TestCheckResourceAttrPair(subnetResName, "ip_collection", subPdpResName, "self_link"),
+					testAccCheckSubnetIpCollectionMatchesPdp(t, subnetResName, subPdpResName),
 				),
 			},
 			// Import Check
@@ -1328,6 +1329,38 @@ resource "google_compute_subnetwork" "subnetwork" {
   ipv6_access_type = "INTERNAL"
 }
 `, cnName, subnetworkName)
+}
+
+func testAccCheckSubnetIpCollectionMatchesPdp(t *testing.T, subnetResourceName, pdpResourceName string) resource.TestCheckFunc {
+    return func(s *terraform.State) error {
+        subnetRes, ok := s.RootModule().Resources[subnetResourceName]
+        if !ok {
+            return fmt.Errorf("Not found: %s", subnetResourceName)
+        }
+        pdpRes, ok := s.RootModule().Resources[pdpResourceName]
+        if !ok {
+            return fmt.Errorf("Not found: %s", pdpResourceName)
+        }
+
+        ipCollection := subnetRes.Primary.Attributes["ip_collection"]
+        expectedPdpSelfLink := pdpRes.Primary.Attributes["self_link"]
+
+        if ipCollection == "" {
+            return fmt.Errorf("ip_collection is empty, expected it to be set on %s", subnetResourceName)
+        }
+
+        // Normalize both to the partial path format for comparison
+        // GetResourceNameFromSelfLink only returns a string
+        normalizedIpCollection := tpgresource.GetResourceNameFromSelfLink(ipCollection)
+        normalizedPdpSelfLink := tpgresource.GetResourceNameFromSelfLink(expectedPdpSelfLink)
+
+        if normalizedIpCollection != normalizedPdpSelfLink {
+            return fmt.Errorf("mismatch: ip_collection (%s) and PDP self_link (%s) don't match after normalization. Expected %s, got %s",
+                ipCollection, expectedPdpSelfLink, normalizedPdpSelfLink, normalizedIpCollection)
+        }
+
+        return nil
+    }
 }
 
 func testAccComputeSubnetwork_ipv6PdpSetup(context map[string]interface{}) string {
